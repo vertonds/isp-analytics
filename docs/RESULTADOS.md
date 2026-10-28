@@ -1,13 +1,23 @@
 # Resultados
-> Gerado por `python -m src.pipeline` em 28/10/2026 15:30 UTC · base fictícia (semente 42) · data de referência **30/09/2026** · 7.920 clientes · 9.000 contratos · 186.726 faturas · 18.627 ordens de serviço
+> Gerado por `python -m src.pipeline` em 28/10/2026 21:00 UTC · base fictícia (semente 42) · data de referência **30/09/2026** · 7.920 clientes · 9.000 contratos · 186.726 faturas · 18.627 ordens de serviço
 
-Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são os mesmos que as portas de qualidade conferiram no fim da carga.
+Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são os mesmos que as portas de qualidade conferiram no fim da carga; as frases de leitura também são calculadas dos dados, a cada execução.
 
-## Churn mensal por filial (últimos 12 meses)
+**Índice:** [Churn mensal por filial](#churn-mensal-por-filial) · [Inadimplência por faixa de atraso](#inadimplência-por-faixa-de-atraso) · [Inadimplência por filial](#inadimplência-por-filial) · [LTV por plano](#ltv-por-plano) · [Ativações por filial](#ativações-por-filial) · [Safra de vendas: retenção](#safra-de-vendas-retenção) · [Ordens de serviço: tempo de fechamento](#ordens-de-serviço-tempo-de-fechamento)
 
-`sql/metricas/churn.sql`
+## Churn mensal por filial
 
-![Churn mensal por filial (últimos 12 meses)](imagens/churn_mensal.png)
+`sql/metricas/churn.sql` · gráfico: últimos 24 meses · tabela: últimos 12 meses
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="imagens/churn_mensal-escuro.png">
+  <img alt="Churn mensal por filial" src="imagens/churn_mensal-claro.png">
+</picture>
+
+Churn consolidado de **1,30% ao mês** nos últimos 12 meses (out/2025 a set/2026), cerca de 15% ao ano, com a base ativa indo de 4.678 para 6.195 contratos. Filial Norte tem o maior churn médio do período (1,56%) e Filial Sul o menor (1,13%).
+
+<details>
+<summary>Tabela completa (72 linhas)</summary>
 
 | mes | filial | ativos_inicio | perdas | churn_pct | media_movel_3m |
 |---|---|---|---|---|---|
@@ -84,11 +94,18 @@ Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são
 | 2026-09 | Filial Leste | 972 | 12 | 1,23 | 0,98 |
 | 2026-09 | Filial Oeste | 706 | 12 | 1,7 | 1,41 |
 
+</details>
+
 ## Inadimplência por faixa de atraso
 
-`sql/metricas/inadimplencia_faixas.sql`
+`sql/metricas/inadimplencia_faixas.sql` · posição em 30/09/2026
 
-![Inadimplência por faixa de atraso](imagens/inadimplencia_faixas.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="imagens/inadimplencia_faixas-escuro.png">
+  <img alt="Vencido em aberto por faixa de atraso" src="imagens/inadimplencia_faixas-claro.png">
+</picture>
+
+**R$ 443.842** vencidos em aberto em 30/09/2026, em 1.776 contratos distintos. 59,7% do valor tem mais de 180 dias, e 63,3% do vencido está em contratos já cancelados: é dívida de quem saiu, não de quem está na base.
 
 | ordem | faixa_dias | titulos | contratos | valor_vencido | pct_do_vencido |
 |---|---|---|---|---|---|
@@ -99,9 +116,13 @@ Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são
 | 5 | 181+ | 2113 | 860 | 265.131,75 | 59,7 |
 | 9 | TOTAL | 3314 | 1992 | 443.841,63 | 100 |
 
+> **Nota:** a linha TOTAL soma a coluna `contratos` das faixas (1.992); um contrato com títulos em mais de uma faixa conta em cada uma. Contratos distintos com vencido: 1.776. Corrigir o TOTAL no SQL para contar distintos, com teste, é o próximo passo (fora desta versão, que é só de apresentação).
+
 ## Inadimplência por filial
 
-`sql/metricas/inadimplencia_filial.sql`
+`sql/metricas/inadimplencia_filial.sql` · contratos ativos em 30/09/2026
+
+Entre os contratos **ativos**, 941 de 6.195 (15,2%) têm algum título vencido. Filial Centro tem a maior taxa (15,9%) e Filial Oeste a menor (14,1%).
 
 | filial | contratos_ativos | contratos_vencidos | taxa_inadimplencia_pct | valor_vencido | valor_acima_90d | posicao |
 |---|---|---|---|---|---|---|
@@ -113,9 +134,14 @@ Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são
 
 ## LTV por plano
 
-`sql/metricas/ltv.sql`
+`sql/metricas/ltv.sql` · ticket e churn dos últimos 12 meses; realizado de todos os contratos encerrados
 
-![LTV por plano](imagens/ltv_plano.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="imagens/ltv_plano-escuro.png">
+  <img alt="LTV por plano: esperado × realizado" src="imagens/ltv_plano-claro.png">
+</picture>
+
+O LTV esperado com horizonte de 60 meses vai de **R$ 4.853** (Fibra 200 Mega) a **R$ 52.978** (Link Dedicado 100 Mega). Em cada plano o realizado fica entre 23% e 27% do esperado: o padrão se repete, porque o realizado só enxerga quem já saiu, com 14,6 meses de casa em média.
 
 | plano | segmento | ticket_medio | churn_mensal_pct | vida_esperada_meses | ltv_esperado | ltv_esperado_60m | ltv_realizado | meses_de_casa_encerrados | contratos_encerrados | posicao |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -126,11 +152,16 @@ Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são
 | Fibra 400 Mega | PF | 108,22 | 1,36 | 73,5 | 7.951,25 | 6.492,97 | 1.561,01 | 14,8 | 738 | 5 |
 | Fibra 200 Mega | PF | 88,58 | 1,83 | 54,8 | 4.852,51 | 4.852,51 | 1.261,07 | 14,5 | 901 | 6 |
 
-## Ativações por filial (últimos 12 meses)
+## Ativações por filial
 
-`sql/metricas/ativacoes_filial.sql`
+`sql/metricas/ativacoes_filial.sql` · gráfico: últimos 18 meses · tabela: últimos 12 meses
 
-![Ativações por filial (últimos 12 meses)](imagens/ativacoes_filial.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="imagens/ativacoes_filial-escuro.png">
+  <img alt="Ativações por filial e mês" src="imagens/ativacoes_filial-claro.png">
+</picture>
+
+**2.168 vendas novas** nos últimos 12 meses da tabela (3.187 nos 18 meses do gráfico; 5.200 na série inteira). Filial Centro lidera com 745 no ano, 34% do total.
 
 | filial | ativacoes_12m | media_mensal | ultimo_mes | var_vs_mes_anterior_pct | var_vs_ano_anterior_pct | fatia_no_ultimo_mes_pct | posicao |
 |---|---|---|---|---|---|---|---|
@@ -142,9 +173,17 @@ Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são
 
 ## Safra de vendas: retenção
 
-`sql/metricas/safra.sql`
+`sql/metricas/safra.sql` · todas as safras da série; cada coluna só conta quem já tem a idade
 
-![Safra de vendas: retenção](imagens/safra_retencao.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="imagens/safra_retencao-escuro.png">
+  <img alt="Retenção por safra após 3, 6 e 12 meses" src="imagens/safra_retencao-claro.png">
+</picture>
+
+Em média, **93%** de cada safra de vendas continua na base após 3 meses, 88% após 6 e 81% após 12 (a retenção de 12 meses só conta as 21 safras que já têm essa idade).
+
+<details>
+<summary>Tabela completa (33 linhas)</summary>
 
 | safra | vendas | ja_cancelaram | cancelados_pct | retencao_3m_pct | retencao_6m_pct | retencao_12m_pct |
 |---|---|---|---|---|---|---|
@@ -182,9 +221,13 @@ Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são
 | 2026-08 | 209 | 3 | 1,4 | — | — | — |
 | 2026-09 | 198 | 0 | 0 | — | — | — |
 
-## Ordens de serviço: tempo de fechamento (últimos 12 meses)
+</details>
 
-`sql/metricas/os_tempo_fechamento.sql`
+## Ordens de serviço: tempo de fechamento
+
+`sql/metricas/os_tempo_fechamento.sql` · abertas nos últimos 12 meses
+
+Nos últimos 12 meses, 6.101 ordens de serviço foram fechadas e 33 seguem abertas. Reparo leva 1,0 dia na mediana (1,6 na média): a mediana é a que vale, porque poucas O.S. longas puxam a média.
 
 | assunto | fechadas | abertas | media_dias | mediana_dias | maximo_dias |
 |---|---|---|---|---|---|
@@ -195,9 +238,11 @@ Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são
 
 ## Execução registrada
 
+Etapas da última execução do pipeline (`controle_execucao`).
+
 | etapa | situacao | duracao_s |
 |---|---|---|
-| carregar_sor | OK | 3,43 |
-| construir_sot | OK | 1,79 |
-| construir_spec | OK | 0,32 |
-| portas | OK | 0,06 |
+| carregar_sor | OK | 6,17 |
+| construir_sot | OK | 2,34 |
+| construir_spec | OK | 0,36 |
+| portas | OK | 0,05 |

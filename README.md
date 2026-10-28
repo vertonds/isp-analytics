@@ -5,12 +5,27 @@
 ![SQL](https://img.shields.io/badge/SQL-CTEs%20%C2%B7%20janelas%20%C2%B7%20SQLite-0f6cbd)
 [![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green)](LICENSE)
 
-> Estudo de caso de **engenharia de dados analítica** para um provedor de internet: uma base fictícia gerada em Python,
-> carregada em SQLite e organizada nas camadas **Stage → SOR → SOT → SPEC**, com as métricas que um provedor precisa
-> olhar todo dia escritas em SQL (churn, inadimplência por faixa de atraso, LTV, ativações por filial, safra) e
-> **portas de qualidade** que bloqueiam número errado.
->
-> Todo dado aqui é sintético (NumPy + Faker, semente fixa). A arquitetura e as regras vêm de um dashboard real que
+## Resumo em 30 segundos
+
+Pipeline analítico de um provedor de internet, com dados sintéticos, organizado em camadas **Stage → SOR → SOT → SPEC**
+em SQLite. Cada métrica tem **uma definição só, escrita uma vez em SQL e conferida a cada carga** por portas de
+qualidade que bloqueiam número errado. Projeto de portfólio de [Everton Vieira](https://vertonds.github.io).
+
+| **1,3% ao mês** | **R$ 443.842** | **6 portas + 9 testes** |
+|:---:|:---:|:---:|
+| churn consolidado nos últimos 12 meses, com a base crescendo de 4.678 para 6.195 contratos ativos | vencido em aberto na data de referência; 60% há mais de 180 dias, quase tudo em contratos já cancelados | rodam a cada carga e no CI; agregado tem de bater com o detalhe, senão a carga não passa |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/churn_mensal-escuro.png">
+  <img alt="Churn mensal por filial, 24 meses" src="docs/imagens/churn_mensal-claro.png">
+</picture>
+
+**Índice:** [O problema](#1-o-problema) · [Arquitetura](#2-arquitetura) · [Como rodar](#3-como-rodar) ·
+[Modelo de dados](#4-modelo-de-dados) · [Decisões](#5-decisões-de-projeto) · [As métricas](#6-as-métricas) ·
+[Portas e testes](#7-portas-de-qualidade-e-testes) · [Limitações](#8-limitações-e-próximos-passos) · [Sobre](#9-sobre)
+· [Resultados completos](docs/RESULTADOS.md)
+
+> **Todo dado aqui é sintético** (NumPy + Faker, semente fixa). A arquitetura e as regras vêm de um dashboard real que
 > construí para um provedor regional; nenhum dado da empresa está neste repositório.
 
 | | |
@@ -41,21 +56,28 @@ vez, conferida a cada carga** — e como se prova isso.
 
 ## 2. Arquitetura
 
+```mermaid
+flowchart LR
+    ERP["ERP simulado<br/>gerar_dados.py"]
+    STAGE["Stage<br/>CSV cru, como o ERP entrega:<br/>';', dd/mm/aaaa, vírgula decimal<br/>+ marcador _completa.json"]
+    SOR["SOR<br/>cópia tipada e íntegra:<br/>datas ISO, números, chaves, índices<br/>nenhuma regra"]
+    SOT["SOT<br/>regras escritas uma vez:<br/>venda nova, perda de cliente,<br/>título válido, faixa de atraso, fluxo mensal"]
+    SPEC["SPEC<br/>agregados prontos por métrica:<br/>churn, faixas, LTV, ativações, safra"]
+    SQL["Consultas<br/>sql/metricas/*.sql<br/>e gráficos"]
+    ERP --> STAGE --> SOR --> SOT --> SPEC --> SQL
+    P1{{"porta: marcador, contagem<br/>e volume"}} -.-> SOR
+    P2{{"porta: idempotência<br/>e registro de execução"}} -.-> SOT
+    P3{{"portas: fluxo fecha, faixas somam<br/>o total, TOTAL = soma das filiais"}} -.-> SQL
+    classDef camada fill:#2C2140,stroke:#E8B23A,color:#F2ECE0,stroke-width:1.5px
+    classDef porta fill:#F6E7B8,stroke:#8A6508,color:#1C1A17
+    classDef borda fill:#1C1922,stroke:#7A4DB8,color:#F2ECE0
+    class STAGE,SOR,SOT,SPEC camada
+    class P1,P2,P3 porta
+    class ERP,SQL borda
 ```
- ERP (simulado)          Stage                 SOR                   SOT                     SPEC
- ───────────────   ──────────────────   ──────────────────   ─────────────────────   ──────────────────────
- gerar_dados.py ─▶ CSV cru, como o  ─▶ cópia TIPADA e    ─▶ REGRAS de negócio   ─▶ agregados prontos para
-                   ERP entregaria:      íntegra: datas       escritas uma vez:      a tela e para o SQL
-                   ';' dd/mm/aaaa       ISO, números,        venda nova, perda      analítico: churn mensal,
-                   vírgula decimal      chaves, índices      de cliente, título     faixas de atraso, LTV,
-                   + _completa.json     (nenhuma regra)      válido, faixa de       ativações, safra
-                                                             atraso, fluxo mensal
-                          │                    │                    │                       │
-                          └────── porta ───────┴──── portas ────────┴──────── portas ───────┘
-                       marcador + contagem    idempotência        fluxo fecha, faixas somam o total,
-                       + volume               registro            TOTAL = soma das filiais, mesmo número
-                                                                   em qualquer leitura
-```
+
+As portas rodam no fim de cada etapa e **bloqueiam** a seguinte se falharem; Python orquestra e carrega, e as camadas
+SOT e SPEC são só SQL.
 
 | Camada | O que é | O que **não** entra | Onde está |
 |---|---|---|---|
@@ -92,12 +114,12 @@ python -m venv .venv ; .\.venv\Scripts\python -m pip install -r requirements.txt
 Saída do pipeline:
 
 ```
-[   7.6s] stage (gerar): {'filial': 5, 'plano': 6, 'cliente': 7920, 'contrato': 9000, 'fatura': 186726, 'ordem_servico': 18627}
-[   3.7s] sor: {'filial': 5, 'plano': 6, 'cliente': 7920, 'contrato': 9000, 'fatura': 186726, 'ordem_servico': 18627}
-[   1.5s] sot: ['10_sot_contrato.sql', '20_sot_titulo.sql', '30_sot_calendario_mes.sql', '40_sot_base_mensal.sql']
+[   7.4s] stage (gerar): {'filial': 5, 'plano': 6, 'cliente': 7920, 'contrato': 9000, 'fatura': 186726, 'ordem_servico': 18627}
+[   4.6s] sor: {'filial': 5, 'plano': 6, 'cliente': 7920, 'contrato': 9000, 'fatura': 186726, 'ordem_servico': 18627}
+[   2.0s] sot: ['10_sot_contrato.sql', '20_sot_titulo.sql', '30_sot_calendario_mes.sql', '40_sot_base_mensal.sql']
 [   0.3s] spec: ['10_spec_churn_mensal.sql', '20_spec_inadimplencia_faixa.sql', '30_spec_ltv_plano.sql', '40_spec_ativacoes_filial_mes.sql', '50_spec_safra_retencao.sql']
-[   0.0s] portas: {'stage_igual_sor': {...}, 'nenhum_titulo_cancelado_no_sot': 183041, 'fluxo_da_base_fecha': 165, 'faixas_somam_o_total': 443841.63, 'churn_total_e_soma_das_filiais': 33, 'ativacoes_batem_com_a_base': 5200}
-[   1.5s] relatorio: {'churn': 'churn_mensal.png', 'inadimplencia': 'inadimplencia_faixas.png', 'ltv': 'ltv_plano.png', 'ativacoes': 'ativacoes_filial.png', 'safra': 'safra_retencao.png'}
+[   0.0s] portas: {'stage_igual_sor': {'filial': 5, 'plano': 6, 'cliente': 7920, 'contrato': 9000, 'fatura': 186726, 'ordem_servico': 18627}, 'nenhum_titulo_cancelado_no_sot': 183041, 'fluxo_da_base_fecha': 165, 'faixas_somam_o_total': 443841.63, 'churn_total_e_soma_das_filiais': 33, 'ativacoes_batem_com_a_base': 5200}
+[   2.2s] relatorio: {'churn': 'churn_mensal', 'inadimplencia': 'inadimplencia_faixas', 'ltv': 'ltv_plano', 'ativacoes': 'ativacoes_filial', 'safra': 'safra_retencao'}
 pipeline concluído — portas OK, relatório em docs/
 ```
 
@@ -196,11 +218,16 @@ SELECT mes, 0, 'TOTAL', SUM(ativos_inicio), SUM(perdas),
 FROM sot_base_mensal GROUP BY mes;
 ```
 
-![Churn mensal por filial](docs/imagens/churn_mensal.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/churn_mensal-escuro.png">
+  <img alt="Churn mensal por filial, 24 meses" src="docs/imagens/churn_mensal-claro.png">
+</picture>
 
 Leitura: churn consolidado em torno de **1,3% ao mês** nos últimos 12 meses (≈ 15% ao ano), com a base crescendo de
-2.415 para 6.195 contratos ativos no período. Filial Norte e Oeste oscilam mais porque são as menores — o gráfico
-mostra o ruído, e `sql/metricas/churn.sql` adiciona a média móvel de 3 meses para quem precisa de tendência.
+2.415 para 6.195 contratos ativos ao longo dos 33 meses da série (4.678 no início dos últimos 12). As filiais menores oscilam mais: nos 24 meses do gráfico, o desvio padrão do churn
+mensal é 0,63 ponto na Filial Oeste (542 contratos ativos em média), 0,44 na Leste (728) e 0,43 na Norte (829), contra
+0,26 na Centro (1.640). O gráfico mostra o ruído, e `sql/metricas/churn.sql` adiciona a média móvel de 3 meses para quem
+precisa de tendência.
 
 ### Inadimplência por faixa de atraso
 
@@ -219,7 +246,10 @@ CASE WHEN f.status <> 'A' OR f.data_vencimento >= '__REF__' THEN NULL
 WHERE f.status IN ('A', 'R');   -- 'C' nunca alimenta indicador
 ```
 
-![Inadimplência por faixa](docs/imagens/inadimplencia_faixas.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/inadimplencia_faixas-escuro.png">
+  <img alt="Vencido em aberto por faixa de atraso" src="docs/imagens/inadimplencia_faixas-claro.png">
+</picture>
 
 | faixa | títulos | contratos | valor vencido | % |
 |---|---|---|---|---|
@@ -229,6 +259,9 @@ WHERE f.status IN ('A', 'R');   -- 'C' nunca alimenta indicador
 | 91-180 | 359 | 290 | R$ 48.509 | 10,9% |
 | 181+ | 2.113 | 860 | R$ 265.132 | 59,7% |
 | **total** | **3.314** | **1.992** | **R$ 443.842** | 100% |
+
+> **Nota:** o total de contratos soma as faixas; um contrato com títulos em mais de uma faixa conta em cada uma.
+> Contratos distintos com vencido: 1.776. Corrigir o TOTAL no SQL para contar distintos, com teste, é um próximo passo.
 
 Leitura: 60% do valor vencido tem mais de 180 dias — e a maior parte está em contratos **já cancelados** (quem saiu
 por dificuldade financeira deixou as últimas faturas). Entre os contratos **ativos**, 941 de 6.195 (15,2%) têm algum
@@ -245,11 +278,14 @@ ltv_esperado_60m    = ticket_medio × MIN(60, 1 ÷ churn_mensal)
 ltv_realizado       = AVG(receita recebida) dos contratos que já saíram como perda
 ```
 
-![LTV por plano](docs/imagens/ltv_plano.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/ltv_plano-escuro.png">
+  <img alt="LTV por plano: esperado × realizado" src="docs/imagens/ltv_plano-claro.png">
+</picture>
 
 Leitura: o plano dedicado vale dez vezes um plano residencial de entrada — e é também onde o `1/churn` sem
-horizonte mais engana (R$ 330 mil "esperados"). O realizado fica bem abaixo do esperado em todos os planos porque
-só enxerga quem já saiu, com 14 meses de casa em média; quem fica mais tempo ainda não entrou na conta. O projeto
+horizonte mais engana (R$ 330 mil "esperados"). Em cada plano o realizado fica entre 23% e 27% do esperado, porque
+só enxerga quem já saiu, com 14,6 meses de casa em média; quem fica mais tempo ainda não entrou na conta. O projeto
 entrega os três e documenta o viés em vez de escolher o número mais bonito.
 
 ### Ativações por filial
@@ -266,9 +302,13 @@ SELECT mes, id_filial, filial, vendas_novas AS ativacoes,
 FROM sot_base_mensal;
 ```
 
-![Ativações por filial](docs/imagens/ativacoes_filial.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/ativacoes_filial-escuro.png">
+  <img alt="Ativações por filial e mês, 18 meses" src="docs/imagens/ativacoes_filial-claro.png">
+</picture>
 
-Leitura: 5.200 vendas novas no período; Filial Centro responde por ~32% delas. A série sai do calendário do SOT, por
+Leitura: 5.200 vendas novas nos 33 meses da série (3.187 nos 18 meses do gráfico; 2.168 nos 12 meses da tabela);
+Filial Centro responde por ~34% delas em qualquer um dos três recortes. A série sai do calendário do SOT, por
 isso mês sem venda apareceria com zero, não sumiria.
 
 ### Safra de vendas (retenção por coorte)
@@ -276,7 +316,10 @@ isso mês sem venda apareceria com zero, não sumiria.
 De cada mês de venda, quantos continuam após 3, 6 e 12 meses — contando **só quem já tem a idade**: coorte jovem
 fica `NULL`, não zero.
 
-![Safra de vendas](docs/imagens/safra_retencao.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/safra_retencao-escuro.png">
+  <img alt="Retenção por safra após 3, 6 e 12 meses" src="docs/imagens/safra_retencao-claro.png">
+</picture>
 
 Leitura: ~93% das vendas passam de 3 meses, ~88% de 6 e ~80% de 12. Essa curva é o que calibra o risco de
 cancelamento por idade e o que diz se uma safra recente está pior do que as antigas.
@@ -320,7 +363,7 @@ OK
 
 ## 9. Sobre
 
-Projeto de portfólio (nov–dez/2026) de [Everton Vieira](https://github.com/vertonds). A arquitetura em camadas,
+Projeto de portfólio (outubro de 2026) de [Everton Vieira](https://github.com/vertonds) · portfólio em [vertonds.github.io](https://vertonds.github.io). A arquitetura em camadas,
 as regras financeiras (status antes de somar, competência pelo vencimento, titularidade ≠ perda), as portas que
 bloqueiam e o registro de execução reproduzem o que construí para o dashboard de gestão de um provedor regional —
 aqui, com dados fictícios e em escala de demonstração.
