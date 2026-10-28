@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+data/warehouse/*.db
+data/warehouse/*.db-wal
+data/warehouse/*.db-shm
+data/stage/

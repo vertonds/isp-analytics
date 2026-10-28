@@ -1,0 +1,5 @@
+# Versões fixadas: as mesmas com que o README e o docs/RESULTADOS.md foram gerados.
+numpy==2.5.4
+pandas==3.0.6
+Faker==40.43.0
+matplotlib==3.11.2
