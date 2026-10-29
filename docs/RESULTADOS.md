@@ -1,5 +1,5 @@
 # Resultados
-> Gerado por `python -m src.pipeline` em 28/10/2026 21:00 UTC · base fictícia (semente 42) · data de referência **30/09/2026** · 7.920 clientes · 9.000 contratos · 186.726 faturas · 18.627 ordens de serviço
+> Gerado por `python -m src.pipeline` em 28/10/2026 21:09 UTC · base fictícia (semente 42) · data de referência **30/09/2026** · 7.920 clientes · 9.000 contratos · 186.726 faturas · 18.627 ordens de serviço
 
 Cada bloco é a saída de um arquivo de `sql/metricas/`. Os números abaixo são os mesmos que as portas de qualidade conferiram no fim da carga; as frases de leitura também são calculadas dos dados, a cada execução.
 
@@ -242,7 +242,7 @@ Etapas da última execução do pipeline (`controle_execucao`).
 
 | etapa | situacao | duracao_s |
 |---|---|---|
-| carregar_sor | OK | 6,17 |
-| construir_sot | OK | 2,34 |
-| construir_spec | OK | 0,36 |
+| carregar_sor | OK | 3,32 |
+| construir_sot | OK | 1,62 |
+| construir_spec | OK | 0,33 |
 | portas | OK | 0,05 |
